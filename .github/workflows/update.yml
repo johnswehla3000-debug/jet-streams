@@ -25,9 +25,9 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
@@ -38,7 +38,7 @@ jobs:
           python -c "import eccodes; print('eccodes', eccodes.__version__, eccodes.codes_get_api_version())"
 
       - name: Restore GRIB cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: grib_cache
           key: grib-${{ github.run_id }}
@@ -61,12 +61,12 @@ jobs:
           touch _site/.nojekyll
           du -sh _site
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
