@@ -20,6 +20,9 @@ const COMPASS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW',
 
 const qs = new URLSearchParams(location.search);
 const $ = id => document.getElementById(id);
+const NOSTYLE = { setProperty() {} };
+const sty = id => { const e = $(id); return e ? e.style : NOSTYLE; };   // null-safe element.style
+class DataError extends Error {}   // network / decode failures of the wind data only
 const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
 function ramp(s) {
   if (s <= STOPS[0]) return COLS[0];
@@ -187,7 +190,7 @@ if (qs.get('lon')) view.lon0 = +qs.get('lon');
 if (qs.get('lat')) view.lat0 = clamp(+qs.get('lat'), -85, 85);
 const geo = { W: 0, H: 0, dpr: 1, cx: 0, cy: 0, baseR: 1, fcx: 0, fcy: 0, baseK: 1, R: 1, Kf: 1 };
 const time = { hours: 0, playing: qs.get('play') !== '0', speedIdx: 2, NT: 0, loaded: [], prefix: 0 };
-if (qs.get('t')) time.hours = +qs.get('t');
+let pendingT = qs.get('t') ? Math.max(0, +qs.get('t') || 0) : null;   // ?t= applied once that frame is loaded
 const inter = { last: -1e9, dragging: false, vx: 0, vy: 0 };
 let frames = [], manifest = null, times0 = 0;
 const fu = new Float32Array(NG), fv = new Float32Array(NG);
@@ -448,12 +451,12 @@ function maxHours() { return 6 * Math.max(0, time.prefix - 1); }
 function totalHours() { return 6 * (time.NT - 1); }
 function setPlaying(p) {
   time.playing = p; elPlay.setAttribute('aria-label', p ? 'Pause' : 'Play');
-  $('ic-pause').style.display = p ? '' : 'none'; $('ic-play').style.display = p ? 'none' : '';
+  sty('ic-pause').display = p ? '' : 'none'; sty('ic-play').display = p ? 'none' : '';
 }
 elPlay.onclick = () => { if (!time.playing && time.hours >= totalHours() - 0.01) time.hours = 0; setPlaying(!time.playing); };
 elSpeed.onclick = () => { time.speedIdx = (time.speedIdx + 1) % SPEEDS.length; const s = SPEEDS[time.speedIdx];
   elSpeed.textContent = (s < 1 ? String(s).replace(/^0/, '') : s) + '×'; };
-elScrub.addEventListener('input', () => { time.hours = Math.min(+elScrub.value, maxHours()); scrubBox.classList.add('active'); refreshReadout(); });
+elScrub.addEventListener('input', () => { pendingT = null; time.hours = Math.min(+elScrub.value, maxHours()); scrubBox.classList.add('active'); refreshReadout(); });
 elScrub.addEventListener('change', () => scrubBox.classList.remove('active'));
 function setMode(flat) {
   view.target = flat ? 1 : 0; $('v-globe').classList.toggle('on', !flat); $('v-map').classList.toggle('on', flat);
@@ -462,7 +465,7 @@ function setMode(flat) {
 $('v-globe').onclick = () => setMode(false); $('v-map').onclick = () => setMode(true);
 { // legend gradient
   const st = []; for (let v = 0; v <= 90; v += 3) st.push(`${css(ramp(v))} ${(v / 90 * 100).toFixed(1)}%`);
-  $('lg-bar').style.background = `linear-gradient(90deg,${st.join(',')})`;
+  sty('lg-bar').background = `linear-gradient(90deg,${st.join(',')})`;
 }
 function updateTimeUI() {
   const H = totalHours() || 168, p = time.hours / H;
@@ -473,6 +476,7 @@ function updateTimeUI() {
 }
 addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' && e.key !== ' ') return;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') pendingT = null;
   if (e.key === ' ') { e.preventDefault(); elPlay.click(); }
   else if (e.key === 'ArrowRight') time.hours = Math.min(maxHours(), time.hours + 1);
   else if (e.key === 'ArrowLeft') time.hours = Math.max(0, time.hours - 1);
@@ -511,10 +515,10 @@ function refreshReadout() {
   const from = (Math.atan2(-u, -v) / DEG + 360) % 360;
   $('ro-loc').textContent = fmtLL(RO.lat, RO.lon);
   $('ro-ms').textContent = s.toFixed(1);
-  $('ro-sw').style.background = css(ramp(s)); $('ro-sw').style.color = css(ramp(s));
+  sty('ro-sw').background = css(ramp(s)); sty('ro-sw').color = css(ramp(s));
   $('ro-alt').textContent = `${(s * 2.236936).toFixed(1)} mph · ${(s * 3.6).toFixed(1)} km/h`;
   $('ro-dir').textContent = s < 0.5 ? 'Calm' : `From ${COMPASS[Math.round(from / 22.5) % 16]} · ${Math.round(from)}°`;
-  $('ro-arrow').style.transform = `rotate(${(from + 180).toFixed(0)}deg)`;
+  sty('ro-arrow').transform = `rotate(${(from + 180).toFixed(0)}deg)`;
   $('ro-time').textContent = fmtT(times0 + time.hours * 3600e3, true) + ' UTC · 250 mb';
 }
 function openReadout(lon, lat) { Object.assign(RO, { on: true, lon, lat }); elRO.hidden = false; elMarker.hidden = false; refreshReadout(); }
@@ -530,7 +534,7 @@ function updateMarker() {
 
 // ------------------------------------------------------------------ interaction
 const ptrs = new Map(); let pinch = null, downInfo = null;
-function touched() { inter.last = performance.now(); $('hint').classList.add('gone'); }
+function touched() { inter.last = performance.now(); $('hint')?.classList.add('gone'); }
 function zoomBy(f, mx, my) {
   if (view.target < 0.5) view.zoomG = clamp(view.zoomG * f, 0.6, 12);
   else {
@@ -646,9 +650,20 @@ function frame(now) {
 // ------------------------------------------------------------------ loading
 const dcv = document.createElement('canvas'); dcv.width = NLON; dcv.height = NLAT;
 const dctx = dcv.getContext('2d', { willReadFrequently: true });
+async function fetchOK(url) {
+  let r;
+  try { r = await fetch(url); } catch (e) { throw new DataError(url + ': ' + (e.message || e)); }
+  if (!r.ok) throw new DataError(url + ' HTTP ' + r.status);
+  return r;
+}
+async function fetchJSON(url) {
+  const r = await fetchOK(url);
+  try { return await r.json(); } catch (e) { throw new DataError(url + ': invalid JSON'); }
+}
 async function decodePNG(url) {
-  const r = await fetch(url); if (!r.ok) throw new Error(url + ' ' + r.status);
-  const blob = await r.blob();
+  const r = await fetchOK(url);
+  let blob;
+  try { blob = await r.blob(); } catch (e) { throw new DataError(url + ': ' + (e.message || e)); }
   let img;
   if (window.createImageBitmap) {
     try { img = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); }
@@ -659,18 +674,28 @@ async function decodePNG(url) {
   dctx.clearRect(0, 0, NLON, NLAT); dctx.drawImage(img, 0, 0);
   return dctx.getImageData(0, 0, NLON, NLAT).data;
 }
+async function decodePNGRetry(url, tries = 3) {
+  for (let k = 1; ; k++) {
+    try { return await decodePNG(url); }
+    catch (e) {
+      if (k >= tries) throw e instanceof DataError ? e : new DataError(url + ': ' + (e.message || e));
+      await new Promise(r => setTimeout(r, 1000 * k));
+    }
+  }
+}
 async function loadFrame(k) {
-  const m = manifest.frames[k], d = await decodePNG('data/' + m.file);
+  const m = manifest.frames[k], d = await decodePNGRetry('data/' + m.file);
   const qu = new Uint16Array(NG), qv = new Uint16Array(NG);
   for (let i = 0, o = 0; i < NG; i++, o += 4) { const b = d[o+2]; qu[i] = (d[o] << 4) | (b >> 4); qv[i] = (d[o+1] << 4) | (b & 15); }
   frames[k] = { qu, qv, u0: m.u[0], su: (m.u[1] - m.u[0]) / 4095, v0: m.v[0], sv: (m.v[1] - m.v[0]) / 4095 };
   time.loaded[k] = true;
   while (time.loaded[time.prefix]) time.prefix++;
-  $('ld-fill').style.width = (time.prefix / time.NT * 100) + '%';
+  sty('ld-fill').width = (time.prefix / time.NT * 100) + '%';   // #loading is removed once playback starts
+  if (pendingT !== null && maxHours() >= Math.min(pendingT, totalHours())) { time.hours = Math.min(pendingT, totalHours()); pendingT = null; }
 }
 async function boot() {
   try {
-    const [man, coast] = await Promise.all([fetch('data/manifest.json').then(r => r.json()), fetch('data/coast.json').then(r => r.json())]);
+    const [man, coast] = await Promise.all([fetchJSON('data/manifest.json'), fetchJSON('data/coast.json')]);
     manifest = man; time.NT = man.times.length; frames = new Array(time.NT);
     times0 = Date.parse(man.times[0].replace('Z', ':00Z'));
     const t1 = times0 + (time.NT - 1) * 6 * 3600e3;
@@ -682,22 +707,39 @@ async function boot() {
     layout(); geo.R = geo.baseR * view.zoomG; geo.Kf = geo.baseK * view.zoomF;
     // load in time order, a few in parallel; start once the first two are in
     let next = 0;
-    const worker = async () => { while (next < time.NT) { const k = next++; await loadFrame(k); } };
+    let bootErr = null;
+    const worker = async () => {
+      while (next < time.NT) {
+        const k = next++;
+        try { await loadFrame(k); }
+        catch (e) {
+          if (!started) { bootErr = bootErr || e; return; }
+          console.warn('wind frame', k, 'failed to load; the timeline stops before it:', e);   // keep playing what we have
+        }
+      }
+    };
     const all = Promise.all([worker(), worker(), worker(), worker()]);
-    while (time.prefix < 2) await new Promise(r => setTimeout(r, 30));
+    while (time.prefix < 2) {
+      if (bootErr) throw bootErr;
+      await new Promise(r => setTimeout(r, 30));
+    }
     time.hours = clamp(time.hours, 0, maxHours());
     updateField(time.hours / 6);
     setCount(targetCount());
     for (let i = 0; i < 40; i++) { frameNo++; stepParticles(230000 / geo.R); }   // warm up trails
     started = true; setPlaying(time.playing);
-    $('loading').classList.add('done'); setTimeout(() => $('loading').remove(), 1000);
-    setTimeout(() => $('hint').classList.add('gone'), 9000);
+    $('loading')?.classList.add('done'); setTimeout(() => $('loading')?.remove(), 1000);
+    setTimeout(() => $('hint')?.classList.add('gone'), 9000);
     await all;
   } catch (e) {
     console.error(e);
+    const esc = x => String(x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+    if (started && !(e instanceof DataError)) return;   // already running: never blank the screen for a late UI error
     fatal(location.protocol === 'file:'
       ? 'Browsers block data loading from <b>file://</b> pages.<br>Serve this folder with any static server, e.g.<br><code>python3 -m http.server</code> and open <code>http://localhost:8000</code>'
-      : 'Could not load the wind data (' + (e.message || e) + ').');
+      : e instanceof DataError
+        ? 'Could not load the wind data (' + esc(e.message) + ').<br>Check your connection and reload the page.'
+        : 'The visualization failed to start (' + esc(e.message || e) + ').');
   }
 }
 requestAnimationFrame(frame);
