@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="data:,">
+<meta name="description" content="Interactive globe of Earth's jet streams: a week of NOAA GFS 250 mb winds.">
+<title>Earth’s Jet Streams · A Week of Winds at 250 mb</title>
+<link rel="preload" href="fonts/serif-semibold.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/mono-regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<canvas id="gl" aria-label="Animated globe of wind flow at 250 millibars"></canvas>
+<div id="labels" aria-hidden="true"></div>
+<div id="marker" hidden></div>
+
+<div id="hint">Drag to rotate · Scroll to zoom · Click for wind</div>
+
+<aside id="readout" hidden aria-live="polite">
+  <button id="ro-close" aria-label="Close readout">×</button>
+  <div class="ro-loc" id="ro-loc">—</div>
+  <div class="ro-speed"><span class="swatch" id="ro-sw"></span><span id="ro-ms">—</span><small>m/s</small></div>
+  <div class="ro-alt" id="ro-alt">—</div>
+  <div class="ro-dir"><span class="arrow" id="ro-arrow">↑</span><span id="ro-dir">—</span></div>
+  <div class="ro-time" id="ro-time">—</div>
+</aside>
+
+<div id="bottom">
+  <header id="title">
+    <h1>Earth’s <br class="brk">Jet Streams</h1>
+    <p class="sub">A Week of Winds at 250 mb</p>
+  </header>
+  <section id="panel">
+    <div id="time" class="time">— — UTC</div>
+    <div class="scrub">
+      <div class="track"><div class="buf" id="buf"></div><div class="fill" id="fill"></div><div class="ticks" id="ticks"></div></div>
+      <input id="scrub" type="range" min="0" max="168" step="0.01" value="0" aria-label="Time">
+    </div>
+    <div class="controls">
+      <button id="play" class="btn icon" aria-label="Pause"><svg viewBox="0 0 16 16" width="14" height="14"><g id="ic-pause"><rect x="3" y="2" width="3.2" height="12" rx="1"/><rect x="9.8" y="2" width="3.2" height="12" rx="1"/></g><path id="ic-play" d="M4 2.2v11.6c0 .6.7 1 1.2.6l8.4-5.8c.4-.3.4-.9 0-1.2L5.2 1.6C4.7 1.2 4 1.6 4 2.2z" style="display:none"/></svg></button>
+      <button id="speed" class="btn" aria-label="Playback speed">1×</button>
+      <span class="spacer"></span>
+      <div class="seg" role="group" aria-label="Projection">
+        <button id="v-globe" class="on">Globe</button><button id="v-map">Map</button>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="lg-title">Wind speed · 250 mb</div>
+      <div class="lg-bar" id="lg-bar"></div>
+      <div class="lg-ticks"><span style="left:0">0</span><span style="left:22.22%">20</span><span style="left:44.44%">40</span><span style="left:66.67%">60</span><span style="left:88.89%">80+</span><span class="unit">m/s</span></div>
+    </div>
+    <div class="credit">Data: NOAA GFS 0.5° analysis · UGRD/VGRD 250 mb<br><span id="range"></span></div>
+  </section>
+</div>
+
+<div id="loading"><div class="ld-t">Loading wind data</div><div class="ld-bar"><i id="ld-fill"></i></div></div>
+<div id="fps" hidden></div>
+<noscript><div class="fatal">This visualization needs JavaScript and WebGL2.</div></noscript>
+<script src="js/app.js"></script>
+</body>
+</html>

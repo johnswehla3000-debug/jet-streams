@@ -1,0 +1,3 @@
+numpy>=1.24
+pillow>=10.0
+eccodes>=2.38   # pulls in the eccodeslib binary wheel (bundled ecCodes C library)

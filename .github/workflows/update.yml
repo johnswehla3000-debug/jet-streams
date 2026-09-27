@@ -1,0 +1,72 @@
+name: Update data and deploy to Pages
+
+on:
+  schedule:
+    # 11:20 UTC daily, after the 06Z GFS analysis is on NOMADS
+    - cron: '20 11 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -c "import eccodes; print('eccodes', eccodes.__version__, eccodes.codes_get_api_version())"
+
+      - name: Restore GRIB cache
+        uses: actions/cache@v4
+        with:
+          path: grib_cache
+          key: grib-${{ github.run_id }}
+          restore-keys: grib-
+
+      - name: Download latest week from NOMADS and encode
+        run: |
+          mkdir -p grib_cache
+          find grib_cache -name 'gfs_*.grb2' -mtime +9 -delete || true
+          python update_data.py
+          python - <<'PY'
+          import json; m = json.load(open('data/manifest.json'))
+          print('range:', m['times'][0], '->', m['times'][-1], '(', len(m['times']), 'frames )')
+          PY
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp -r index.html css js fonts data README.md _site/
+          touch _site/.nojekyll
+          du -sh _site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,4 @@
+Vendored, subsetted web fonts (WOFF2):
+  serif-semibold.woff2, serif-italic.woff2 : Source Serif Pro (c) Adobe, SIL Open Font License 1.1
+  mono-regular.woff2, mono-medium.woff2    : IBM Plex Mono (c) IBM Corp., SIL Open Font License 1.1
+Full license text: https://openfontlicense.org/open-font-license-official-text/

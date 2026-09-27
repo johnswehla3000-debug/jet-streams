@@ -1,0 +1,6 @@
+grib_cache/
+_site/
+__pycache__/
+# Wind data is regenerated daily by the workflow and deployed via the Pages artifact, not committed.
+data/wind_*.png
+data/manifest.json
